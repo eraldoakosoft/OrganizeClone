@@ -1,5 +1,6 @@
 package com.example.organizze.activity;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.app.DatePickerDialog;
@@ -12,10 +13,18 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.organizze.R;
+import com.example.organizze.config.ConfiguracaoFirebase;
+import com.example.organizze.helper.Base64Custom;
 import com.example.organizze.helper.DateUtil;
 import com.example.organizze.model.Movimentacao;
+import com.example.organizze.model.Usuario;
 import com.github.clans.fab.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.ValueEventListener;
 
 import java.util.Calendar;
 
@@ -25,12 +34,15 @@ public class DespesasActivity extends AppCompatActivity {
     private TextInputEditText campoDescricaoD, campoCategoriaD;
     private TextView campoDataD;
     private EditText campoValorD;
-    //private FloatingActionButton btnSalvarD;
     private Movimentacao movimentacao;
+    private Double despesaTotal;
 
     //Configurações para o calendario
     Calendar calendar;
     android.app.DatePickerDialog datePickerDialog;
+
+    private DatabaseReference databaseReference = ConfiguracaoFirebase.getFirebaseDataBase();
+    private FirebaseAuth firebaseAuth = ConfiguracaoFirebase.getFirebaseAutenticacao();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,7 +56,6 @@ public class DespesasActivity extends AppCompatActivity {
         campoDescricaoD = findViewById(R.id.editTextDespesaDescricao);
 
 
-        //campoDataD.setText(DateUtil.dataAtual());
         campoDataD.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -65,6 +76,8 @@ public class DespesasActivity extends AppCompatActivity {
             }
         });
 
+        recuperarDespesaTotal();
+
 
     }
 
@@ -73,14 +86,20 @@ public class DespesasActivity extends AppCompatActivity {
         if (validarCampos()){
             movimentacao = new Movimentacao();
             String data = campoDataD.getText().toString();
-            movimentacao.setValor(Double.parseDouble(campoValorD.getText().toString()));
+            Double valorRecuperado = Double.parseDouble(campoValorD.getText().toString());
+            movimentacao.setValor(valorRecuperado);
             movimentacao.setCategoria(campoCategoriaD.getText().toString());
             movimentacao.setDescricao(campoDescricaoD.getText().toString());
             movimentacao.setData(data);
             movimentacao.setTipo("d");
             movimentacao.salvar(data);
 
+            Double despesaAtualizada = despesaTotal + valorRecuperado;
+            atualizarDespesa( despesaAtualizada );
+
             Toast.makeText(this, "Salvo com Sucesso!", Toast.LENGTH_SHORT).show();
+
+            finish();
         }
     }
 
@@ -128,11 +147,42 @@ public class DespesasActivity extends AppCompatActivity {
 
         return data;
     }
+
+
     /**Esconda o teclado*/
     public void esconderTeclado() {
         if(getCurrentFocus()!=null) {
             InputMethodManager inputMethodManager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
             inputMethodManager.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(), 0);
         }
+    }
+
+    public void recuperarDespesaTotal(){
+
+        String emailUsuario = firebaseAuth.getCurrentUser().getEmail();
+        String idUsuario = Base64Custom.codificarBase64(emailUsuario);
+        DatabaseReference usuarioRef = databaseReference.child("usuarios").child(idUsuario);
+        usuarioRef.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                Usuario usuario = dataSnapshot.getValue(Usuario.class);
+                despesaTotal = usuario.getDespesaTotal();
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+
+            }
+        });
+
+    }
+
+    public void atualizarDespesa(Double despesa){
+
+        String emailUsuario = firebaseAuth.getCurrentUser().getEmail();
+        String idUsuario = Base64Custom.codificarBase64(emailUsuario);
+        DatabaseReference usuarioRef = databaseReference.child("usuarios").child(idUsuario);
+
+        usuarioRef.child("despesaTotal").setValue(despesa);
     }
 }
